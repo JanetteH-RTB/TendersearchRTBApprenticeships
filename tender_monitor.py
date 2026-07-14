@@ -34,6 +34,22 @@ import requests
 # CONFIG - edit these lists to tune what gets caught
 # --------------------------------------------------------------------------
 
+# OPTION A (STRICT) - THIS is the list currently in use.
+# A notice is flagged only if its title or description contains one of these.
+APPRENTICESHIP_TERMS = [
+    "apprenticeship",
+    "apprentice",
+    "apprentices",
+    "levy",
+    "apprenticeship levy",
+]
+
+# ------------------------------------------------------------------
+# The two lists below are NOT currently used (Option A ignores them).
+# They are kept so you can widen the search again later without
+# rebuilding anything. To use them, see the note in is_relevant().
+# ------------------------------------------------------------------
+
 # Keywords matched against notice title + description (case-insensitive).
 # Grouped only for readability; they all behave the same way.
 KEYWORDS = [
@@ -154,18 +170,12 @@ def is_relevant(tender):
         if bad in text:
             return False, None
 
-    # CPV match: does any code start with one of our prefixes?
-    codes = cpv_codes(tender)
-    for code in codes:
-        for pref in CPV_PREFIXES:
-            if code.startswith(pref[:5]) and code.startswith(pref[:8]):
-                return True, "CPV code " + code
-        # 80-division catch-all: any education/training code
-        if code.startswith("80"):
-            return True, "CPV code " + code + " (education/training)"
-
-    # Keyword match on title/description.
-    for kw in KEYWORDS:
+    # OPTION A - STRICT: only flag notices that explicitly mention
+    # apprenticeship / apprentice / levy in the title or description.
+    # The broad CPV catch-all and the generic programme keywords are
+    # deliberately NOT used on their own, as they let unrelated training
+    # tenders through. To widen the net again later, see the block below.
+    for kw in APPRENTICESHIP_TERMS:
         if re.search(r"\b" + re.escape(kw) + r"\b", text):
             return True, 'matched "' + kw + '"'
 
@@ -373,3 +383,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
