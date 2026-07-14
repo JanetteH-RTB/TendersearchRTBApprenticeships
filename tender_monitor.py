@@ -45,9 +45,8 @@ APPRENTICESHIP_TERMS = [
 ]
 
 # ------------------------------------------------------------------
-# The two lists below are NOT currently used (Option A ignores them).
-# They are kept so you can widen the search again later without
-# rebuilding anything. To use them, see the note in is_relevant().
+# COMBINED MODE is active: all three signals below are used together
+# with APPRENTICESHIP_TERMS (see is_relevant). Edit any list to tune.
 # ------------------------------------------------------------------
 
 # Keywords matched against notice title + description (case-insensitive).
@@ -165,19 +164,31 @@ def cpv_codes(tender):
 def is_relevant(tender):
     text = text_of(tender)
 
-    # Exclusions first (none by default).
+    # Exclusions first (none by default). Add lower-case words to
+    # EXCLUDE_WORDS to drop noise once you see what comes through.
     for bad in EXCLUDE_WORDS:
         if bad in text:
             return False, None
 
-    # OPTION A - STRICT: only flag notices that explicitly mention
-    # apprenticeship / apprentice / levy in the title or description.
-    # The broad CPV catch-all and the generic programme keywords are
-    # deliberately NOT used on their own, as they let unrelated training
-    # tenders through. To widen the net again later, see the block below.
+    # COMBINED MODE: a notice is flagged if ANY of the following hit.
+    # 1) It mentions apprenticeship / apprentice / levy.
     for kw in APPRENTICESHIP_TERMS:
         if re.search(r"\b" + re.escape(kw) + r"\b", text):
             return True, 'matched "' + kw + '"'
+
+    # 2) It matches one of RTB's programme keywords.
+    for kw in KEYWORDS:
+        if re.search(r"\b" + re.escape(kw) + r"\b", text):
+            return True, 'matched "' + kw + '"'
+
+    # 3) It carries an education / training CPV code.
+    codes = cpv_codes(tender)
+    for code in codes:
+        for pref in CPV_PREFIXES:
+            if code.startswith(pref[:8]):
+                return True, "CPV code " + code
+        if code.startswith("80"):
+            return True, "CPV code " + code + " (education/training)"
 
     return False, None
 
