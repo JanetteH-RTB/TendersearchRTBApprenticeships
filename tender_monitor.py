@@ -376,7 +376,24 @@ def main():
         plain, html = build_email(matches)
         send_email(subject, plain, html)
     else:
-        print("Nothing new to send today.")
+        # Option 2: send a short confirmation even when nothing was found,
+        # so the team knows the scan ran. To go quiet on empty days again,
+        # replace this block with:  print("Nothing new to send today.")
+        subject = "RTB Tender Alert: no new apprenticeship opportunities today"
+        plain = ("The daily scan ran successfully.\n\n"
+                 "No new apprenticeship tenders were found on Find a Tender "
+                 "or Contracts Finder since the last check.\n")
+        html = (
+            "<html><body style='font-family:Arial,Helvetica,sans-serif;color:#222'>"
+            "<h2>RTB Tender Alert</h2>"
+            "<p>The daily scan ran successfully.</p>"
+            "<p style='color:#555'>No new apprenticeship tenders were found on "
+            "Find a Tender or Contracts Finder since the last check.</p>"
+            "<p style='font-size:11px;color:#999'>Automated daily scan. "
+            "You are receiving empty-day confirmations; this can be turned off later.</p>"
+            "</body></html>"
+        )
+        send_email(subject, plain, html)
 
     save_seen(seen)
 
