@@ -388,8 +388,14 @@ def main():
         send_email(subject, plain, html)
     else:
         # Option 2: send a short confirmation even when nothing was found,
-        # so the team knows the scan ran. To go quiet on empty days again,
+        # so the team knows the scan ran. Controlled by SEND_EMPTY so the
+        # afternoon backup run stays silent on empty days (see workflow).
+        # To go quiet on all empty days, set SEND_EMPTY=no everywhere or
         # replace this block with:  print("Nothing new to send today.")
+        if os.environ.get("SEND_EMPTY", "yes").lower() != "yes":
+            print("Nothing new; empty-day email suppressed for this run.")
+            save_seen(seen)
+            return
         subject = "RTB Tender Alert: no new apprenticeship opportunities today"
         plain = ("The daily scan ran successfully.\n\n"
                  "No new apprenticeship tenders were found on Find a Tender "
@@ -411,4 +417,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

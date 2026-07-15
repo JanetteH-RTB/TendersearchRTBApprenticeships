@@ -2,10 +2,12 @@ name: RTB Tender Alerts
 
 on:
   schedule:
-    # 07:15 UTC every weekday (Mon-Fri). GitHub cron is always UTC.
-    # In British Summer Time this arrives ~08:15; in winter ~07:15.
-    - cron: "15 7 * * 1-5"
-  workflow_dispatch:        # lets you run it manually from the Actions tab
+    # Two runs a day for reliability, because GitHub's free scheduled
+    # runs are often delayed or skipped. seen.json stops the second run
+    # re-sending anything the first already covered. Both times are UTC.
+    - cron: "15 7 * * 1-5"    # ~07:15 UTC (morning)
+    - cron: "15 13 * * 1-5"   # ~13:15 UTC (afternoon backup)
+  workflow_dispatch:          # lets you run it manually from the Actions tab
 
 permissions:
   contents: write            # needed so the job can commit seen.json back
@@ -31,6 +33,9 @@ jobs:
           SMTP_PASS: ${{ secrets.SMTP_PASS }}
           MAIL_TO: ${{ secrets.MAIL_TO }}
           LOOKBACK_DAYS: "2"
+          # Only the morning run sends an empty-day "nothing found" note,
+          # so quiet days don't produce two confirmation emails.
+          SEND_EMPTY: ${{ github.event.schedule == '15 13 * * 1-5' && 'no' || 'yes' }}
         run: python tender_monitor.py
 
       - name: Save seen-notice state
