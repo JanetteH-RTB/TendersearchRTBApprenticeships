@@ -45,37 +45,57 @@ APPRENTICESHIP_TERMS = [
 ]
 
 # ------------------------------------------------------------------
-# COMBINED MODE is active: all three signals below are used together
-# with APPRENTICESHIP_TERMS (see is_relevant). Edit any list to tune.
+# TIERED MODE (see is_relevant):
+#  - STRONG_TERMS fire on their own (unambiguous apprenticeship/training).
+#  - CONTEXT_TERMS only fire when the notice ALSO shows a training signal,
+#    so broad words like "project manager" or "improvement" stop matching
+#    unrelated construction/manufacturing tenders.
+#  - CPV codes still fire on their own.
 # ------------------------------------------------------------------
 
-# Keywords matched against notice title + description (case-insensitive).
-# Grouped only for readability; they all behave the same way.
-KEYWORDS = [
-    # Team Leader
+# Fire on their own - unambiguous.
+STRONG_TERMS = [
+    "apprenticeship", "apprentice", "apprentices",
+    "apprenticeship levy", "levy",
+    "apprenticeship standard", "training standard",
+    "administration apprenticeship",
+    "coaching professional",
+    "ai and automation",
+    "associate project manager",
+    "business administrator",
+    "improvement specialist", "improvement technician",
+    # DPS only in a training context:
+    "apprenticeship dynamic purchasing system",
+    "training dynamic purchasing system",
+    "apprenticeship dps", "training dps",
+]
+
+# Only fire when a TRAINING SIGNAL is also present (see TRAINING_SIGNALS).
+# These are the broad words that were "going rogue" on their own.
+CONTEXT_TERMS = [
     "team leader", "team leader/supervisor", "supervisor", "first line manager",
-    # Operations Manager
     "operations manager", "operations/departmental manager",
     "departmental manager", "operational management",
-    # Coaching Professional
-    "coaching professional", "coaching", "coach",
-    # Improvement Specialist / Technician
-    "improvement specialist", "improvement technician",
-    "continuous improvement", "process improvement", "business improvement", "lean",
-    # AI & Automation
-    "ai and automation", "artificial intelligence", "ai specialist",
-    "automation specialist",
-    # Associate Project Manager
-    "associate project manager", "project manager", "project management",
-    # Business Administrator
-    "business administrator", "business admin", "administration apprenticeship",
-    # General apprenticeship safety net
-    "apprenticeship", "apprentice", "apprenticeship levy",
+    "coaching", "coach",
+    "continuous improvement", "process improvement",
+    "business improvement", "lean",
+    "artificial intelligence", "ai specialist", "automation specialist",
+    "project manager", "project management",
+    "business admin",
+    "standard", "standards",
+    "dynamic purchasing system", "dps",
+]
+
+# A CONTEXT_TERM only counts if one of these also appears in the notice,
+# or the notice carries an education/training CPV code.
+TRAINING_SIGNALS = [
+    "apprentice", "apprenticeship", "apprenticeships",
+    "training", "learner", "learners", "qualification", "qualifications",
+    "levy", "skills", "further education", "vocational", "nvq", "diploma",
 ]
 
 # CPV codes for education / training / coaching. A notice tagged with any of
-# these is treated as relevant even if the keywords don't hit, so we catch
-# broad "training provider framework" style tenders.
+# these is treated as relevant on its own (broad "training framework" catch).
 CPV_PREFIXES = [
     "79998000",  # Coaching services
     "80000000",  # Education and training services (parent)
@@ -91,7 +111,7 @@ CPV_PREFIXES = [
     "80570000",  # Personal development training services
 ]
 
-# No exclusions requested. Add lower-cased words here later to drop noise.
+# Add lower-cased words here to drop notices outright.
 EXCLUDE_WORDS = []
 
 # --------------------------------------------------------------------------
@@ -161,34 +181,45 @@ def cpv_codes(tender):
     return codes
 
 
+def has_word(text, phrase):
+    return re.search(r"\b" + re.escape(phrase) + r"\b", text) is not None
+
+
 def is_relevant(tender):
     text = text_of(tender)
+    codes = cpv_codes(tender)
 
-    # Exclusions first (none by default). Add lower-case words to
-    # EXCLUDE_WORDS to drop noise once you see what comes through.
+    # Exclusions first. Add lower-case words to EXCLUDE_WORDS to drop noise.
     for bad in EXCLUDE_WORDS:
         if bad in text:
             return False, None
 
-    # COMBINED MODE: a notice is flagged if ANY of the following hit.
-    # 1) It mentions apprenticeship / apprentice / levy.
-    for kw in APPRENTICESHIP_TERMS:
-        if re.search(r"\b" + re.escape(kw) + r"\b", text):
+    has_edu_cpv = any(
+        any(code.startswith(pref[:8]) for pref in CPV_PREFIXES) or code.startswith("80")
+        for code in codes
+    )
+
+    # A "training signal" is present if any signal word appears OR an
+    # education/training CPV code is attached. Context terms need this.
+    training_signal = has_edu_cpv or any(has_word(text, s) for s in TRAINING_SIGNALS)
+
+    # 1) STRONG terms fire on their own.
+    for kw in STRONG_TERMS:
+        if has_word(text, kw):
             return True, 'matched "' + kw + '"'
 
-    # 2) It matches one of RTB's programme keywords.
-    for kw in KEYWORDS:
-        if re.search(r"\b" + re.escape(kw) + r"\b", text):
-            return True, 'matched "' + kw + '"'
+    # 2) CONTEXT terms fire ONLY alongside a training signal, so broad
+    #    words no longer match unrelated project/improvement tenders.
+    if training_signal:
+        for kw in CONTEXT_TERMS:
+            if has_word(text, kw):
+                return True, 'matched "' + kw + '" (with training context)'
 
-    # 3) It carries an education / training CPV code.
-    codes = cpv_codes(tender)
-    for code in codes:
-        for pref in CPV_PREFIXES:
-            if code.startswith(pref[:8]):
-                return True, "CPV code " + code
-        if code.startswith("80"):
-            return True, "CPV code " + code + " (education/training)"
+    # 3) Education/training CPV code on its own.
+    if has_edu_cpv:
+        hit = next((c for c in codes
+                    if any(c.startswith(p[:8]) for p in CPV_PREFIXES) or c.startswith("80")), "")
+        return True, "CPV code " + hit
 
     return False, None
 
